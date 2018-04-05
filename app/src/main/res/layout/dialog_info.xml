@@ -19,7 +19,6 @@
             android:layout_width="fill_parent"
             android:layout_height="40.0dip"
             android:gravity="center"
-            android:text="sfasfasf"
             android:visibility="visible" />
 
         <LinearLayout
@@ -27,8 +26,28 @@
             android:layout_width="fill_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:gravity="center|right" >
+            android:gravity="center|right">
             <np.TextView
+                android:id="@+id/message"
+                style="@style/text_16_666666"
+                android:layout_width="fill_parent"
+                android:layout_height="wrap_content"
+                android:gravity="left|center"
+                android:lineSpacingMultiplier="1.5"
+                android:padding="5dp"
+                android:text="Configure threshold to notify people about noisy" />
+
+            <np.EditText
+                android:id="@+id/threshold"
+                style="@style/edit_text_16_666666"
+                android:layout_width="fill_parent"
+                android:layout_height="wrap_content"
+                android:textAlignment="center"
+                android:inputType="numberDecimal"
+                android:textCursorDrawable="@drawable/cursor_drawble"
+                android:backgroundTint="@color/mygreen"/>
+
+            <!--<np.TextView
                 android:id="@+id/message"
                 style="@style/text_16_666666"
                 android:layout_width="fill_parent"
@@ -76,7 +95,7 @@
                 android:gravity="left|center"
                 android:lineSpacingMultiplier="1.5"
                 android:padding="5dp"
-                android:text="@string/info_150db" />
+                android:text="@string/info_150db" />-->
         </LinearLayout>
 
         <View

@@ -9,10 +9,14 @@ import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import np.EditText;
+
 /**
  * Created by bodekjan on 2016/8/8.
  */
 public class InfoDialog extends Dialog {
+
+    private np.EditText thresholdEditText;
 
     public InfoDialog(Context context) {
         super(context);
@@ -22,7 +26,19 @@ public class InfoDialog extends Dialog {
         super(context, theme);
     }
 
+    public float getThreshold() {
+        if (thresholdEditText != null) {
+            try {
+                return Float.parseFloat(thresholdEditText.getText().toString());
+            } catch (NumberFormatException e) {
+                // ignore
+            }
+        }
+        return -1.0f;
+    }
+
     public static class Builder {
+
         private Context context;
         private String title;
         private String message;
@@ -132,6 +148,8 @@ public class InfoDialog extends Dialog {
                 ((LinearLayout) layout.findViewById(R.id.content))
                         .addView(contentView, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.FILL_PARENT, LinearLayout.LayoutParams.FILL_PARENT));
             }
+            dialog.thresholdEditText = (EditText) layout.findViewById(R.id.threshold);
+            dialog.thresholdEditText.setText(String.valueOf(World.getThreshold()));
             dialog.setContentView(layout);
             return dialog;
         }

@@ -1,6 +1,7 @@
 package com.bodekjan.soundmeter;
 
 import android.media.MediaRecorder;
+import android.util.Log;
 
 import java.io.File;
 import java.io.IOException;
@@ -52,6 +53,20 @@ public class MyMediaRecorder {
 
             mMediaRecorder.prepare();
             mMediaRecorder.start();
+            mMediaRecorder.setOnInfoListener(new MediaRecorder.OnInfoListener() {
+                @Override
+                public void onInfo(MediaRecorder mediaRecorder, int i, int i1) {
+                    Log.i("android-sound-meter", "media recorder info code #" + i + " extra #" + i1);
+                    // FIXME: restart process
+                }
+            });
+            mMediaRecorder.setOnErrorListener(new MediaRecorder.OnErrorListener() {
+                @Override
+                public void onError(MediaRecorder mediaRecorder, int i, int i1) {
+                    Log.e("android-sound-meter", "media recorder error code #" + i + " extra #" + i1);
+                    // FIXME: restart process
+                }
+            });
             isRecording = true;
             return true;
         } catch(IOException exception) {
@@ -60,7 +75,7 @@ public class MyMediaRecorder {
             mMediaRecorder = null;
             isRecording = false ;
             exception.printStackTrace();
-        }catch(IllegalStateException e){
+        } catch(IllegalStateException e){
             stopRecording();
             e.printStackTrace();
             isRecording = false ;

@@ -3,23 +3,22 @@ package com.bodekjan.soundmeter;
 import android.app.Activity;
 import android.content.Context;
 import android.content.DialogInterface;
-import android.content.SharedPreferences;
-import android.content.pm.ActivityInfo;
+import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.media.AudioManager;
+import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Handler;
+import android.os.Looper;
 import android.os.Message;
 import android.os.Bundle;
-import android.text.Spannable;
-import android.text.SpannableString;
+import android.speech.tts.TextToSpeech;
+import android.speech.tts.UtteranceProgressListener;
 import android.util.Log;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
-import android.view.animation.Animation;
-import android.view.animation.AnimationUtils;
-import android.view.animation.TranslateAnimation;
 import android.widget.ImageButton;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -38,6 +37,7 @@ import java.io.File;
 import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.Locale;
 
 public class MainActivity extends Activity {
     ArrayList<Entry> yVals;
@@ -61,7 +61,8 @@ public class MainActivity extends Activity {
     private Thread thread;
     float volume = 10000;
     int refresh=0;
-    private MyMediaRecorder mRecorder ;
+    private MyMediaRecorder mRecorder;
+    private TextToSpeech mTextToSpeech;
 
     final Handler handler = new Handler(){
         @Override
@@ -94,6 +95,7 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         getWindow().requestFeature(Window.FEATURE_NO_TITLE);
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON); // prevent screen from dimming
         if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             Window window = getWindow();
             window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS
@@ -117,10 +119,16 @@ public class MainActivity extends Activity {
             public void onClick(View view) {
                 InfoDialog.Builder builder = new InfoDialog.Builder(MainActivity.this);
                 builder.setMessage(getString(R.string.activity_infobull));
-                builder.setTitle(getString(R.string.activity_infotitle));
-                builder.setNegativeButton(getString(R.string.activity_infobutton),
+                // builder.setTitle(getString(R.string.activity_infotitle));
+                builder.setTitle("Config. threshold");
+                // builder.setNegativeButton(getString(R.string.activity_infobutton),
+                builder.setNegativeButton("Save",
                         new android.content.DialogInterface.OnClickListener() {
                             public void onClick(DialogInterface dialog, int which) {
+                                if (dialog instanceof InfoDialog) {
+                                    float newThreshold = ((InfoDialog) dialog).getThreshold();
+                                    World.setThreshold(newThreshold);
+                                }
                                 dialog.dismiss();
                             }
                         });
@@ -131,17 +139,80 @@ public class MainActivity extends Activity {
         refreshButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                refreshed=true;
-                World.minDB=100;
-                World.dbCount=0;
-                World.lastDbCount=0;
-                World.maxDB=0;
-                initChart();
+                refreshRecord();
             }
         });
 
         speedometer=(Speedometer)findViewById(R.id.speed);
         mRecorder = new MyMediaRecorder();
+        mTextToSpeech = new TextToSpeech(getApplicationContext(), new TextToSpeech.OnInitListener() {
+            @Override
+            public void onInit(int i) {
+                mTextToSpeech.setLanguage(Locale.getDefault());
+            }
+        });
+        World.setOnTooMuchNoiseListener(new World.OnTooMuchNoiseListener() {
+            @Override
+            public void onTooMuchNoise() {
+                if (mTextToSpeech != null && !mTextToSpeech.isSpeaking()) {
+                    new AsyncTask<Void, Void, Void>() {
+
+                        @Override
+                        protected Void doInBackground(Void... voids) {
+                            Log.w("android-sound-meter", "stop recording");
+                            // pause recording
+                            bListener = false;
+                            mRecorder.delete(); //Stop recording and delete the recording file
+                            isChart=false;
+
+                            return null;
+                        }
+
+                        @Override
+                        protected void onPostExecute(Void aVoid) {
+                            mTextToSpeech.speak("Pessoal, vocês estão falando muito alto.",
+                                    TextToSpeech.QUEUE_FLUSH,
+                                    null);
+
+                            new Handler().postDelayed(new Runnable() {
+                                @Override
+                                public void run() {
+                                    Log.w("android-sound-meter", "restart recording");
+                                    File file = FileUtil.createFile("temp.amr");
+                                    if (file != null) {
+                                        startRecord(file);
+                                    } else {
+                                        Log.e("android-sound-meter", getString(R.string.activity_recFileErr));
+                                    }
+                                    bListener = true;
+                                }
+                            }, 3500);
+                        }
+                    }.execute();
+                }
+            }
+        });
+        World.setOnUnknownCrashListener(new World.OnUnknownCrashListener() {
+            @Override
+            public void onUnknownCrash() {
+                /*if (infoButton != null) {
+                    infoButton.performClick();
+                }*/
+
+                /*Intent intent = getIntent();
+                finish();
+                startActivity(intent);*/
+            }
+        });
+    }
+
+    private void refreshRecord() {
+        refreshed = true;
+        World.minDB=100;
+        World.dbCount=0;
+        World.lastDbCount=0;
+        World.maxDB=0;
+        initChart();
     }
 
     private void updateData(float val, long time) {
@@ -164,6 +235,7 @@ public class MainActivity extends Activity {
             savedTime++;
         }
     }
+
     private void initChart() {
         if(mChart!=null){
             if (mChart.getData() != null &&
@@ -240,17 +312,24 @@ public class MainActivity extends Activity {
             mChart.setData(data);
             mChart.getLegend().setEnabled(false);
             mChart.animateXY(2000, 2000);
-            // dont forget to refresh the drawing
+            // dont forget to refreshRecord the drawing
             mChart.invalidate();
             isChart=true;
         }
 
     }
+
     /* Sub-chant analysis */
     private void startListenAudio() {
+        if (thread != null) {
+            return;
+        }
         thread = new Thread(new Runnable() {
             @Override
             public void run() {
+                if (BuildConfig.DEBUG) {
+                    Log.d("android-sound-meter", "initialize thread #" + thread.getId());
+                }
                 while (isThreadRun) {
                     try {
                         if(bListener) {
@@ -278,6 +357,7 @@ public class MainActivity extends Activity {
         });
         thread.start();
     }
+
     /**
      * Start recording
      * @param fFile
@@ -295,6 +375,7 @@ public class MainActivity extends Activity {
             e.printStackTrace();
         }
     }
+
     @Override
     protected void onResume() {
         super.onResume();
@@ -315,7 +396,6 @@ public class MainActivity extends Activity {
         super.onPause();
         bListener = false;
         mRecorder.delete(); //Stop recording and delete the recording file
-        thread = null;
         isChart=false;
     }
 
@@ -323,9 +403,18 @@ public class MainActivity extends Activity {
     protected void onDestroy() {
         if (thread != null) {
             isThreadRun = false;
+            try {
+                thread.join();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
             thread = null;
         }
         mRecorder.delete();
+        if (mTextToSpeech != null) {
+            mTextToSpeech.shutdown();
+            mTextToSpeech = null;
+        }
         super.onDestroy();
     }
 }
